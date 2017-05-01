@@ -1,9 +1,13 @@
 package net
 
-import mux "github.com/nimona/go-nimona-mux"
+import (
+	"io"
+
+	mux "github.com/nimona/go-nimona-mux"
+)
 
 // Network -
 type Network interface {
-	HandleSteam(protocolID string, handler func(stream *mux.Stream) error) error
+	HandleStream(protocolID string, handler func(protocolID string, rwc io.ReadWriteCloser) error) error
 	NewStream(protocolID, peerID string) (*mux.Stream, error)
 }
