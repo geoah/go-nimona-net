@@ -2,17 +2,12 @@ package net
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"net"
 
 	ms "github.com/multiformats/go-multistream"
 
 	mux "github.com/nimona/go-nimona-mux"
-)
-
-const (
-	dummyProtocolID = "/nimona/dummy"
 )
 
 var (
@@ -28,10 +23,10 @@ func NewTCPNetwork(peer Peer) (*TCPNetwork, error) {
 		peer:         peer,
 		peers:        map[string]Peer{},
 		multiplexers: map[string]*mux.Mux{},
-		mux:  ms.NewMultistreamMuxer(),
-		cmux: ms.NewMultistreamMuxer(),
+		mux:          ms.NewMultistreamMuxer(),
+		cmux:         ms.NewMultistreamMuxer(),
 	}
-	net.cmux.AddHandler("/cselect/v1.0.0", net.handleConnection)
+	net.cmux.AddHandler(mux.ProtocolID, net.handleConnection)
 	go net.handle()
 	return net, nil
 }
@@ -42,8 +37,8 @@ type TCPNetwork struct {
 	peer         Peer
 	peers        map[string]Peer
 	multiplexers map[string]*mux.Mux
-	mux  *ms.MultistreamMuxer
-	cmux *ms.MultistreamMuxer
+	mux          *ms.MultistreamMuxer
+	cmux         *ms.MultistreamMuxer
 }
 
 // GetPeers -
@@ -82,20 +77,15 @@ func (n *TCPNetwork) NewStream(protocolID, peerID string) (*mux.Stream, error) {
 		return nil, err
 	}
 
-	err = ms.SelectProtoOrFail("/cselect/v1.0.0", c)
+	err = ms.SelectProtoOrFail(mux.ProtocolID, c)
 	if err != nil {
-		fmt.Println("SELERR1", err)
 		return nil, err
 	}
 
 	mss, err := mux.New(c)
 	if err != nil {
-		fmt.Println("MUXNERR", err)
 		return nil, err
 	}
-
-	// TODO Should we also start handling this protocol?
-	// eg. go n.handlers[protocolID](ms)
 
 	n.multiplexers[peerID] = mss
 
@@ -113,17 +103,11 @@ func (n *TCPNetwork) NewStream(protocolID, peerID string) (*mux.Stream, error) {
 
 // HandleStream incoming streams
 func (n *TCPNetwork) HandleStream(protocolID string, handler func(proto string, stream io.ReadWriteCloser) error) error {
-	// TODO protocols are not supported yet as we need a selection protocol (the irony)
-	protocolID = dummyProtocolID
-	if _, ok := n.handlers[protocolID]; ok {
-		// TODO Is this really needed?
-		return errors.New("Protocol already registered")
 	n.mux.AddHandler(protocolID, handler)
 	return nil
 }
 
 func (n *TCPNetwork) handleConnection(proto string, rwc io.ReadWriteCloser) error {
-	fmt.Println("Handling connection")
 	ms, err := mux.New(rwc)
 	if err != nil {
 		return err
@@ -137,7 +121,6 @@ func (n *TCPNetwork) handleConnection(proto string, rwc io.ReadWriteCloser) erro
 
 		go n.mux.Handle(mss)
 	}
-	return nil
 }
 
 // handle incoming events
