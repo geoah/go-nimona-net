@@ -1,27 +1,23 @@
 package net
 
 import (
-	"errors"
 	"io"
 	"net"
 
 	ms "github.com/multiformats/go-multistream"
 
 	mux "github.com/nimona/go-nimona-mux"
+	ps "github.com/nimona/go-nimona-peerstore"
 )
 
-var (
-	// ErrorCNF Could not get address from peer id
-	ErrorCNF = errors.New("Could not resolve peer ID")
-)
-
+// HandlerFunc
 type HandlerFunc func(proto string, rwc io.ReadWriteCloser) error
 
-// NewTCPNetwork -
-func NewTCPNetwork(peer Peer) (*TCPNetwork, error) {
+// NewTCPNetwork
+func NewTCPNetwork(peer ps.Peer, peerstore ps.Peerstore) (*TCPNetwork, error) {
 	net := &TCPNetwork{
 		peer:         peer,
-		peers:        map[string]Peer{},
+		peerstore:    peerstore,
 		multiplexers: map[string]*mux.Mux{},
 		mux:          ms.NewMultistreamMuxer(),
 		cmux:         ms.NewMultistreamMuxer(),
@@ -34,28 +30,14 @@ func NewTCPNetwork(peer Peer) (*TCPNetwork, error) {
 // TCPNetwork is the simplest possible network
 type TCPNetwork struct {
 	// TODO sync.Mutex for dials maybe?
-	peer         Peer
-	peers        map[string]Peer
+	peer         ps.Peer
+	peerstore    ps.Peerstore
 	multiplexers map[string]*mux.Mux
 	mux          *ms.MultistreamMuxer
 	cmux         *ms.MultistreamMuxer
 }
 
-// GetPeers -
-func (n *TCPNetwork) GetPeers() map[string]Peer {
-	return n.peers
-}
-
-// Add peer to network
-func (n *TCPNetwork) Add(peer Peer) error {
-	if n.peers == nil {
-		n.peers = map[string]Peer{}
-	}
-	n.peers[peer.GetID()] = peer
-	return nil
-}
-
-// NewStream -
+// NewStream
 func (n *TCPNetwork) NewStream(protocolID, peerID string) (*mux.Stream, error) {
 	if n.multiplexers == nil {
 		n.multiplexers = map[string]*mux.Mux{}
@@ -67,12 +49,12 @@ func (n *TCPNetwork) NewStream(protocolID, peerID string) (*mux.Stream, error) {
 		}
 	}
 
-	peer, ok := n.peers[peerID]
-	if !ok {
-		return nil, ErrorCNF // TODO Better error
+	peer, err := n.peerstore.Get(ps.ID(peerID))
+	if err != nil {
+		return nil, err
 	}
 
-	c, err := net.Dial("tcp", peer.GetAddresses()[0])
+	c, err := net.Dial("tcp", peer.GetAddresses()[0]) // TODO Find the correct address
 	if err != nil {
 		return nil, err
 	}
