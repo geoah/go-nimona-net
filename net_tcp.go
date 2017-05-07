@@ -43,10 +43,17 @@ func (n *TCPNetwork) NewStream(protocolID, peerID string) (*mux.Stream, error) {
 		n.multiplexers = map[string]*mux.Mux{}
 	}
 
-	if ms, ok := n.multiplexers[peerID]; ok {
-		if str, err := ms.NewStream(); err == nil {
-			return str, nil
+	if mss, ok := n.multiplexers[peerID]; ok {
+		st, err := mss.NewStream()
+		if err != nil {
+			return nil, err
 		}
+
+		err = ms.SelectProtoOrFail(protocolID, st)
+		if err != nil {
+			return nil, err
+		}
+		return st, nil
 	}
 
 	peer, err := n.peerstore.Get(ps.ID(peerID))
