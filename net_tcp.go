@@ -7,17 +7,13 @@ import (
 	ms "github.com/multiformats/go-multistream"
 
 	mux "github.com/nimona/go-nimona-mux"
-	ps "github.com/nimona/go-nimona-peerstore"
 )
 
-// HandlerFunc
-type HandlerFunc func(proto string, rwc io.ReadWriteCloser) error
-
 // NewTCPNetwork
-func NewTCPNetwork(peer ps.Peer, peerstore ps.Peerstore) (*TCPNetwork, error) {
+func NewTCPNetwork(peer *Peer) (Network, error) {
 	net := &TCPNetwork{
 		peer:         peer,
-		peerstore:    peerstore,
+		peerstore:    NewPeerstore(),
 		multiplexers: map[string]*mux.Mux{},
 		mux:          ms.NewMultistreamMuxer(),
 		cmux:         ms.NewMultistreamMuxer(),
@@ -30,8 +26,8 @@ func NewTCPNetwork(peer ps.Peer, peerstore ps.Peerstore) (*TCPNetwork, error) {
 // TCPNetwork is the simplest possible network
 type TCPNetwork struct {
 	// TODO sync.Mutex for dials maybe?
-	peer         ps.Peer
-	peerstore    ps.Peerstore
+	peer         *Peer
+	peerstore    *peerstore
 	multiplexers map[string]*mux.Mux
 	mux          *ms.MultistreamMuxer
 	cmux         *ms.MultistreamMuxer
@@ -56,12 +52,12 @@ func (n *TCPNetwork) NewStream(protocolID, peerID string) (*mux.Stream, error) {
 		return st, nil
 	}
 
-	peer, err := n.peerstore.Get(ps.ID(peerID))
+	peer, err := n.peerstore.Get(peerID)
 	if err != nil {
 		return nil, err
 	}
 
-	c, err := net.Dial("tcp", peer.GetAddresses()[0]) // TODO Find the correct address
+	c, err := net.Dial("tcp", peer.Addresses[0]) // TODO Find the correct address
 	if err != nil {
 		return nil, err
 	}
@@ -90,8 +86,8 @@ func (n *TCPNetwork) NewStream(protocolID, peerID string) (*mux.Stream, error) {
 	return st, nil
 }
 
-// HandleStream incoming streams
-func (n *TCPNetwork) HandleStream(protocolID string, handler func(proto string, stream io.ReadWriteCloser) error) error {
+// RegisterStreamHandler for incoming streams
+func (n *TCPNetwork) RegisterStreamHandler(protocolID string, handler func(proto string, stream io.ReadWriteCloser) error) error {
 	n.mux.AddHandler(protocolID, handler)
 	return nil
 }
@@ -114,7 +110,8 @@ func (n *TCPNetwork) handleConnection(proto string, rwc io.ReadWriteCloser) erro
 
 // handle incoming events
 func (n *TCPNetwork) handle() error {
-	c, err := net.Listen("tcp", n.peer.GetAddresses()[0])
+	// TODO Pick correct address
+	c, err := net.Listen("tcp", n.peer.Addresses[0])
 	if err != nil {
 		return err
 	}
@@ -126,4 +123,29 @@ func (n *TCPNetwork) handle() error {
 		}
 		go n.cmux.Handle(ss)
 	}
+}
+
+// PutPeer adds or updates a Peer
+func (n *TCPNetwork) PutPeer(peer Peer) error {
+	return n.peerstore.Put(peer)
+}
+
+// RemovePeer a Peer
+func (n *TCPNetwork) RemovePeer(id string) error {
+	return n.peerstore.Remove(id)
+}
+
+// GetPeer retrieves a Peer by its ID
+func (n *TCPNetwork) GetPeer(id string) (Peer, error) {
+	return n.peerstore.Get(id)
+}
+
+// GetPeers returns all Peers in this peer store
+func (n *TCPNetwork) GetPeers() []Peer {
+	return n.peerstore.Peers()
+}
+
+// RegisterPeerHandler can register multiple handlers that listen for peer updates
+func (n *TCPNetwork) RegisterPeerHandler(handler func(Peer) error) error {
+	return n.peerstore.RegisterPeerHandler(handler)
 }
