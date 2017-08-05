@@ -56,7 +56,7 @@ func (p *Peer) Sign(data []byte) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-func NewPeerFromArmor(path string) (*Peer, error) {
+func NewPeerFromArmorFile(path string) (*Peer, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -69,6 +69,17 @@ func NewPeerFromArmor(path string) (*Peer, error) {
 	}
 
 	return NewPeer(els[0])
+}
+
+func NewPeerFromArmor(armor []byte) (*Peer, error) {
+	buf := bytes.NewBuffer(armor)
+	els, err := openpgp.ReadArmoredKeyRing(buf)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewPeer(els[0])
+
 }
 
 func NewPeer(ent *openpgp.Entity) (*Peer, error) {

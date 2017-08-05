@@ -6,6 +6,14 @@ import (
 	mux "github.com/nimona/go-nimona-mux"
 )
 
+type PeerEvent string
+
+const (
+	PeerEventCreated PeerEvent = "CREATED"
+	PeerEventUpdated           = "UPDATED"
+	PeerEventRemoved           = "REMOVED"
+)
+
 // Network -
 type Network interface {
 	// NewStream creates a new stram with a specific protocol
@@ -13,6 +21,8 @@ type Network interface {
 	// RegisterStreamHandler adds a stream handler for a specific protocol
 	RegisterStreamHandler(protocolID string, handler func(protocolID string, rwc io.ReadWriteCloser) error) error
 
+	// GetLocalPeer retuns local peer
+	GetLocalPeer() (*Peer, error)
 	// PutPeer adds or updates a Peer
 	PutPeer(peer Peer) error
 	// RemovePeer a Peer
