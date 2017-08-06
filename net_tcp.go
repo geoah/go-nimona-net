@@ -10,8 +10,11 @@ import (
 	ms "github.com/multiformats/go-multistream"
 	upnp "github.com/prestonTao/upnp"
 	logrus "github.com/sirupsen/logrus"
+	smux "github.com/xtaci/smux"
+)
 
-	mux "github.com/nimona/go-nimona-mux"
+const (
+	SmuxProtocolID = "/smux/v1"
 )
 
 // NewTCPNetwork
@@ -20,11 +23,11 @@ func NewTCPNetwork(peer *Peer, port int) (Network, error) {
 		peer:         peer,
 		port:         port,
 		peerstore:    NewPeerstore(),
-		multiplexers: map[string]*mux.Mux{},
+		multiplexers: map[string]*smux.Session{},
 		mux:          ms.NewMultistreamMuxer(),
 		cmux:         ms.NewMultistreamMuxer(),
 	}
-	net.cmux.AddHandler(mux.ProtocolID, net.handleConnection)
+	net.cmux.AddHandler(SmuxProtocolID, net.handleConnection)
 
 	go net.handle()
 	go net.getPublicAddress()
@@ -39,19 +42,19 @@ type TCPNetwork struct {
 	port         int
 	peer         *Peer
 	peerstore    *peerstore
-	multiplexers map[string]*mux.Mux
+	multiplexers map[string]*smux.Session
 	mux          *ms.MultistreamMuxer
 	cmux         *ms.MultistreamMuxer
 }
 
 // NewStream
-func (n *TCPNetwork) NewStream(protocolID, peerID string) (*mux.Stream, error) {
+func (n *TCPNetwork) NewStream(protocolID, peerID string) (*smux.Stream, error) {
 	if n.multiplexers == nil {
-		n.multiplexers = map[string]*mux.Mux{}
+		n.multiplexers = map[string]*smux.Session{}
 	}
 
 	if mss, ok := n.multiplexers[peerID]; ok {
-		st, err := mss.NewStream()
+		st, err := mss.OpenStream()
 		if err != nil {
 			return nil, err
 		}
@@ -77,19 +80,19 @@ func (n *TCPNetwork) NewStream(protocolID, peerID string) (*mux.Stream, error) {
 		return nil, err
 	}
 
-	err = ms.SelectProtoOrFail(mux.ProtocolID, c)
+	err = ms.SelectProtoOrFail(SmuxProtocolID, c)
 	if err != nil {
 		return nil, err
 	}
 
-	mss, err := mux.New(c)
+	mss, err := smux.Client(c, nil)
 	if err != nil {
 		return nil, err
 	}
 
 	n.multiplexers[peerID] = mss
 
-	st, err := mss.NewStream()
+	st, err := mss.OpenStream()
 	if err != nil {
 		return nil, err
 	}
@@ -108,13 +111,13 @@ func (n *TCPNetwork) RegisterStreamHandler(protocolID string, handler func(proto
 }
 
 func (n *TCPNetwork) handleConnection(proto string, rwc io.ReadWriteCloser) error {
-	ms, err := mux.New(rwc)
+	ms, err := smux.Server(rwc, nil)
 	if err != nil {
 		return err
 	}
 
 	for {
-		mss, err := ms.Accept() // TODO Handle error
+		mss, err := ms.AcceptStream() // TODO Handle error
 		if err != nil {
 			continue
 		}

@@ -3,7 +3,7 @@ package net
 import (
 	"io"
 
-	mux "github.com/nimona/go-nimona-mux"
+	"github.com/xtaci/smux"
 )
 
 type PeerEvent string
@@ -17,7 +17,7 @@ const (
 // Network -
 type Network interface {
 	// NewStream creates a new stram with a specific protocol
-	NewStream(protocolID, peerID string) (*mux.Stream, error)
+	NewStream(protocolID, peerID string) (*smux.Stream, error)
 	// RegisterStreamHandler adds a stream handler for a specific protocol
 	RegisterStreamHandler(protocolID string, handler func(protocolID string, rwc io.ReadWriteCloser) error) error
 
