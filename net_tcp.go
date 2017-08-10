@@ -19,6 +19,10 @@ const (
 
 // NewTCPNetwork
 func NewTCPNetwork(peer *Peer, port int) (Network, error) {
+	if port == 0 {
+		port = getPort()
+	}
+
 	net := &TCPNetwork{
 		peer:         peer,
 		port:         port,
@@ -30,8 +34,8 @@ func NewTCPNetwork(peer *Peer, port int) (Network, error) {
 	net.cmux.AddHandler(SmuxProtocolID, net.handleConnection)
 
 	go net.handle()
-	go net.getPublicAddress()
-	go net.mapPorts()
+	// go net.getPublicAddress()
+	// go net.mapPorts()
 
 	return net, nil
 }
@@ -75,7 +79,20 @@ func (n *TCPNetwork) NewStream(protocolID, peerID string) (*smux.Stream, error) 
 		return nil, errors.New("Peer has no addresses")
 	}
 
-	c, err := net.Dial("tcp", peer.Addresses[0]) // TODO Find the correct address
+	addr := ""
+	for _, iaddr := range peer.Addresses {
+		prv, err := privateIP(iaddr)
+		if err == nil && prv == true {
+			continue
+		}
+		addr = iaddr
+	}
+
+	if addr == "" {
+		return nil, errors.New("No valid ip")
+	}
+
+	c, err := net.Dial("tcp", addr)
 	if err != nil {
 		return nil, err
 	}
@@ -160,6 +177,19 @@ func (n *TCPNetwork) handle() error {
 			} else {
 				addr = fmt.Sprintf("%s:%d", ip.String(), n.port)
 			}
+			if addr == "" {
+				continue
+			}
+			hst := strings.Split(addr, ":")[0]
+			prv, err := privateIP(hst)
+			if err == nil && prv == true {
+				continue
+			} else {
+				logrus.WithField("ip", ip).
+					WithField("prv", prv).
+					WithError(err).
+					Debugf("Appending IP")
+			}
 			if addr != "" {
 				n.peer.Addresses = append(n.peer.Addresses, addr)
 				fmt.Printf("> Adding address %s\n", addr)
@@ -173,7 +203,7 @@ func (n *TCPNetwork) handle() error {
 	}
 
 	// listen to all interfaces
-	c, err := net.Listen("tcp", fmt.Sprintf(":%d", n.port))
+	c, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", n.port))
 	if err != nil {
 		return err
 	}
@@ -246,4 +276,40 @@ func (n *TCPNetwork) mapPorts() {
 	} else {
 		fmt.Println("fail !")
 	}
+}
+
+// Ask the kernel for a free open port that is ready to use
+func getPort() int {
+	addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
+	if err != nil {
+		panic(err)
+	}
+
+	l, err := net.ListenTCP("tcp", addr)
+	if err != nil {
+		panic(err)
+	}
+	defer l.Close()
+	return l.Addr().(*net.TCPAddr).Port
+}
+
+func privateIP(ip string) (bool, error) {
+	var err error
+	private := false
+	// IP := net.ParseIP(ip)
+	// if IP == nil {
+	// 	err = errors.New("Invalid IP")
+	// } else if IP.String() == "0.0.0.0" {
+	// 	private = true
+	// } else if IP.String() == "127.0.0.1" {
+	// 	private = true
+	// } else {
+	// 	_, private24BitBlock, _ := net.ParseCIDR("10.0.0.0/8")
+	// 	_, private20BitBlock, _ := net.ParseCIDR("172.16.0.0/12")
+	// 	_, private16BitBlock, _ := net.ParseCIDR("192.168.0.0/16")
+	// 	private = private24BitBlock.Contains(IP) ||
+	// 		private20BitBlock.Contains(IP) ||
+	// 		private16BitBlock.Contains(IP)
+	// }
+	return private, err
 }
