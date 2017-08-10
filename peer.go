@@ -14,8 +14,8 @@ var (
 )
 
 type Peer struct {
-	ID        string
-	Addresses []string
+	ID        string   `json:"id"`
+	Addresses []string `json:"addresses"`
 	entity    *openpgp.Entity
 }
 
