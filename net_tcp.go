@@ -173,7 +173,7 @@ func (n *TCPNetwork) handle() error {
 			}
 			addr := ""
 			if strings.Contains(ip.String(), ":") {
-				addr = fmt.Sprintf("[%s]:%d", ip.String(), n.port)
+				// addr = fmt.Sprintf("[%s]:%d", ip.String(), n.port)
 			} else {
 				addr = fmt.Sprintf("%s:%d", ip.String(), n.port)
 			}
