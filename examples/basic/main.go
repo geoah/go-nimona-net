@@ -7,24 +7,35 @@ import (
 	"io"
 	"log"
 	"os"
+	"sync"
 	"time"
+
+	"github.com/sirupsen/logrus"
 
 	net "github.com/nimona/go-nimona-net"
 )
 
 const (
-	protocolID = "/dummy/v0"
+	protocolID = "dummy/v1"
 	eventType  = "echo-message"
 )
 
-var addr = flag.String("addr", ":2180", "echo service address")
+var (
+	wg = &sync.WaitGroup{}
+
+	addr = flag.String("addr", ":2180", "echo service address")
+)
 
 func main() {
+	logrus.SetLevel(logrus.DebugLevel)
+
 	n1Port := 21600
 	n1PeerID := "n1"
+	n1Addr := "n1/dummy/v1"
 
 	n2Port := 21610
 	n2PeerID := "n2"
+	n2Addr := "n2/dummy/v1"
 
 	// create networks
 	// newNode will return a peer and a network
@@ -54,7 +65,7 @@ func main() {
 	time.Sleep(100 * time.Millisecond)
 
 	// create a new stream from p1 to p2
-	n1s, err := n1.NewStream(protocolID, p2.ID)
+	n1s, err := n1.Dial(n2Addr)
 	if err != nil {
 		log.Fatal("Could not create stream", err)
 	}
@@ -62,9 +73,10 @@ func main() {
 	if _, err := n1s.Write([]byte("Hello from p1!\n")); err != nil {
 		log.Fatal("Could not write to n1s", err)
 	}
+	wg.Add(1)
 
 	// create a new stream from p2 to p1
-	n1s, err = n2.NewStream(protocolID, p1.ID)
+	n1s, err = n2.Dial(n1Addr)
 	if err != nil {
 		log.Fatal("Could not create stream", err)
 	}
@@ -72,21 +84,22 @@ func main() {
 	if _, err := n1s.Write([]byte("Hello back from p2!\n")); err != nil {
 		log.Fatal("Could not write to n1s", err)
 	}
+	wg.Add(1)
 
 	// wait a bit to receive both messages
-	time.Sleep(1 * time.Second)
+	wg.Wait()
 }
 
 func newNode(port int, peerID string) (*net.Peer, net.Network, error) {
 	// create local peer
-	host := fmt.Sprintf("127.0.0.1:%d", port)
+	addrs, _ := net.GetAddresses(port)
 	pr := &net.Peer{
 		ID:        peerID,
-		Addresses: []string{host},
+		Addresses: addrs,
 	}
 
 	// initialize network
-	mn, err := net.NewTCPNetwork(pr)
+	mn, err := net.NewNetwork(pr)
 	if err != nil {
 		fmt.Println("Could not initialize network", err)
 		return nil, nil, err
@@ -97,6 +110,7 @@ func newNode(port int, peerID string) (*net.Peer, net.Network, error) {
 		scanner := bufio.NewScanner(rwc)
 		for scanner.Scan() {
 			fmt.Printf("* Received text in peer=%s, text=%s\n", pr.ID, scanner.Text())
+			wg.Done()
 		}
 		if err := scanner.Err(); err != nil {
 			fmt.Fprintln(os.Stderr, "reading standard input:", err)
