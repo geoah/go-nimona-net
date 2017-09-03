@@ -9,7 +9,9 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 
+	telemetry "github.com/nimona/go-telemetry"
 	// smux "github.com/hashicorp/yamux"
 	ms "github.com/multiformats/go-multistream"
 	logrus "github.com/sirupsen/logrus"
@@ -64,7 +66,6 @@ func NewNetwork(peer *Peer, port int) (Network, error) {
 		sessions:  map[string]*smux.Session{},
 		mux:       ms.NewMultistreamMuxer(),
 		cmux:      ms.NewMultistreamMuxer(),
-		// ids:          map[string]chan string{},
 	}
 
 	n.cmux.AddHandler(SmuxProtocolID, n.handleConnection)
@@ -98,7 +99,6 @@ type network struct {
 	sessions   map[string]*smux.Session
 	mux        *ms.MultistreamMuxer
 	cmux       *ms.MultistreamMuxer
-	// ids          map[string]chan string // map[nonce]remotePeerID
 }
 
 // Dial -
@@ -114,6 +114,12 @@ func (n *network) DialWithContext(ctx context.Context, addr string) (net.Conn, e
 	DDIAL++
 	dial := DDIAL
 
+	tfields := map[string]interface{}{
+		"new":   false,
+		"error": true,
+	}
+	defer telemetry.Publish("net:connection:dialed", tfields)
+
 	ap := strings.Split(addr, "/")
 	if len(ap) < 2 {
 		return nil, errors.New("Missing protocol")
@@ -121,6 +127,8 @@ func (n *network) DialWithContext(ctx context.Context, addr string) (net.Conn, e
 
 	tpid := ap[0] // target peer id
 	protocolID := strings.Join(ap[1:], "/")
+
+	tfields["protocol"] = protocolID
 
 	if tpid == n.GetLocalPeer().ID {
 		return nil, errors.New("I'm not dialing myself")
@@ -148,7 +156,11 @@ func (n *network) DialWithContext(ctx context.Context, addr string) (net.Conn, e
 			if err != nil {
 				return nil, err
 			}
+			tfields["error"] = false
 			logger.Infof("Dialing complete, used existing session")
+			telemetry.Publish("net:stream:opened", map[string]interface{}{
+				"connection": "outgoing",
+			})
 			return st, nil
 		}
 	}
@@ -166,14 +178,17 @@ func (n *network) DialWithContext(ctx context.Context, addr string) (net.Conn, e
 	var utr Transport
 	var daddr string
 
+	tfields["new"] = true
+
 ConnectionLoop:
 	// try to connect to an address
 	for _, raddr := range peer.Addresses {
 		iraddr := raddr + "/" + protocolID
 		// with any available protocol
 		for _, tr := range n.transports {
+			ttype := reflect.TypeOf(tr).String()
 			logger.
-				WithField("tranport", reflect.TypeOf(tr)).
+				WithField("tranport", ttype).
 				Infof("Dialing peer with transport")
 			var err error
 			c, err = tr.DialContext(ctx, iraddr)
@@ -185,6 +200,7 @@ ConnectionLoop:
 			logger.
 				WithField("transport", reflect.TypeOf(utr)).
 				Infof("Dialed")
+			tfields["transport"] = ttype
 			// stop once a connection was establised
 			break ConnectionLoop
 		}
@@ -205,6 +221,7 @@ ConnectionLoop:
 	// selection on their own
 	// TODO This is a very ugly hack, fixing this requires refactoring Dial
 	if _, ok := utr.(*Relay); ok {
+		tfields["error"] = false
 		logger.Debugf("Dialing complete, was relayed")
 		return c, nil
 	}
@@ -246,9 +263,17 @@ ConnectionLoop:
 			}
 			// once a stream has been accepted, we should handle the selected
 			// protocol
+			telemetry.Publish("net:stream:accepted", map[string]interface{}{
+				"connection": "outgoing",
+			})
 			go n.mux.Handle(mssa)
 		}
 	}(mss)
+
+	// TODO Fix sleep hack, this is here to make sure the other side had time
+	// to "handleConnection()" and start "Accepting mux streams".
+	// This doesn't seem to be hapening on the examples. How come?
+	time.Sleep(500 * time.Millisecond)
 
 	logger.Debugf("Opening stream")
 
@@ -270,6 +295,7 @@ ConnectionLoop:
 	}
 
 	logger.Infof("Dialing complete")
+	tfields["error"] = false
 
 	return st, nil
 }
@@ -278,10 +304,11 @@ ConnectionLoop:
 func (n *network) Listen(addr string) (net.Listener, error) {
 	for _, tr := range n.transports {
 		lst, err := tr.Listen(addr)
+		ttype := reflect.TypeOf(tr).String()
 		if err != nil {
 			logrus.
 				WithField("addr", addr).
-				WithField("transport", reflect.TypeOf(tr)).
+				WithField("transport", ttype).
 				WithError(err).
 				Warnf("Could not listen to transport")
 			continue
@@ -292,16 +319,19 @@ func (n *network) Listen(addr string) (net.Listener, error) {
 			Infof("Started listening")
 
 		// start accepting connections
-		go func(lst net.Listener) {
+		go func(lst net.Listener, ttype string) {
 			for {
 				ss, err := lst.Accept()
 				if err != nil {
 					// TODO Log/Handle error
 					continue
 				}
+				telemetry.Publish("net:connection:accepted", map[string]interface{}{
+					"transport": ttype,
+				})
 				go n.cmux.Handle(ss)
 			}
-		}(lst)
+		}(lst, ttype)
 	}
 	// TODO Implement common listener?
 	return nil, nil
@@ -352,6 +382,9 @@ func (n *network) handleConnection(proto string, rwc io.ReadWriteCloser) error {
 				return
 			}
 			logrus.Infof("Accepted mux stream")
+			telemetry.Publish("net:stream:accepted", map[string]interface{}{
+				"connection": "incoming",
+			})
 			go n.mux.Handle(mss)
 		}
 	}(msc)
