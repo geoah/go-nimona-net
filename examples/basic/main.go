@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	protocolID = "dummy/v1"
+	protocolID = "dummy"
 	eventType  = "echo-message"
 )
 
@@ -31,11 +31,11 @@ func main() {
 
 	n1Port := 21600
 	n1PeerID := "n1"
-	n1Addr := "n1/dummy/v1"
+	n1Addr := "n1/dummy"
 
 	n2Port := 21610
 	n2PeerID := "n2"
-	n2Addr := "n2/dummy/v1"
+	n2Addr := "n2/dummy"
 
 	// create networks
 	// newNode will return a peer and a network
@@ -99,10 +99,14 @@ func newNode(port int, peerID string) (*net.Peer, net.Network, error) {
 	}
 
 	// initialize network
-	mn, err := net.NewNetwork(pr)
+	mn, err := net.NewNetwork(pr, port)
 	if err != nil {
 		fmt.Println("Could not initialize network", err)
 		return nil, nil, err
+	}
+
+	for _, addr := range addrs {
+		mn.Listen(addr)
 	}
 
 	// create a stream handler
