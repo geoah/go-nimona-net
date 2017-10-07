@@ -176,6 +176,7 @@ func (n *network) DialWithContext(ctx context.Context, addr string) (net.Conn, e
 	var daddr string
 
 	tfields["new"] = true
+	dialed := false
 
 ConnectionLoop:
 	// try to connect to an address
@@ -185,11 +186,16 @@ ConnectionLoop:
 		for _, tr := range n.transports {
 			ttype := reflect.TypeOf(tr).String()
 			logger.
+				WithField("iraddr", iraddr).
 				WithField("tranport", ttype).
 				Infof("Dialing peer with transport")
 			var err error
 			c, err = tr.DialContext(ctx, iraddr)
 			if err != nil {
+				logger.
+					WithError(err).
+					WithField("tranport", ttype).
+					Warnf("Dialing peer with transport FAILED")
 				continue
 			}
 			utr = tr
@@ -198,12 +204,13 @@ ConnectionLoop:
 				WithField("transport", reflect.TypeOf(utr)).
 				Infof("Dialed")
 			tfields["transport"] = ttype
+			dialed = true
 			// stop once a connection was establised
 			break ConnectionLoop
 		}
 	}
 	// else just return
-	if c == nil {
+	if dialed == false {
 		logger.Debugf("All transports failed")
 		return nil, ErrTransportNotSupported
 	}
