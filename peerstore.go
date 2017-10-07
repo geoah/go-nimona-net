@@ -23,6 +23,9 @@ func (ps *peerstore) Put(peer Peer) error {
 	ps.mutex.Lock()
 	if ep, ok := ps.peers[peer.ID]; ok {
 		for _, addr := range peer.Addresses {
+			if privateAddress(addr) {
+				continue
+			}
 			exists := false
 			for _, eaddr := range ep.Addresses {
 				if eaddr == addr {

@@ -86,3 +86,19 @@ func GetPort() int {
 	defer l.Close()
 	return l.Addr().(*net.TCPAddr).Port
 }
+
+func privateAddress(addr string) bool {
+	if addr == "" {
+		return true
+	}
+
+	if strings.Contains(addr, "0.0.0.0") {
+		return true
+	}
+
+	if strings.Contains(addr, "0.0.0.0") {
+		return true
+	}
+
+	return false
+}
