@@ -27,7 +27,6 @@ func (p *Peer) Verify(target, signature []byte) (bool, error) {
 	bsignature := bytes.NewBuffer(signature)
 	entity, err := openpgp.CheckDetachedSignature(keyring, btarget, bsignature)
 	if err != nil {
-		fmt.Println("Check Detached Signature: " + err.Error())
 		return false, nil
 	}
 

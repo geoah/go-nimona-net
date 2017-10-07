@@ -3,11 +3,13 @@ package net
 import (
 	"errors"
 	"sync"
+
+	"github.com/sirupsen/logrus"
 )
 
 var (
 	// ErrorNotFound is returned when peer does not exist in PeerStore
-	ErrorNotFound = errors.New("Not found")
+	ErrorNotFound = errors.New("Peer not found")
 )
 
 // peerstore is thread safe in-memory implementation of Peerstore
@@ -19,7 +21,24 @@ type peerstore struct {
 
 func (ps *peerstore) Put(peer Peer) error {
 	ps.mutex.Lock()
-	ps.peers[peer.ID] = peer
+	if ep, ok := ps.peers[peer.ID]; ok {
+		for _, addr := range peer.Addresses {
+			exists := false
+			for _, eaddr := range ep.Addresses {
+				if eaddr == addr {
+					exists = true
+					break
+				}
+			}
+			if !exists {
+				ep.Addresses = append(ep.Addresses, addr)
+			}
+		}
+		ps.peers[peer.ID] = ep
+	} else {
+		ps.peers[peer.ID] = peer
+	}
+	logrus.WithField("pid", peer.ID).WithField("addrs", ps.peers[peer.ID].Addresses).Infof("Updated peer info")
 	ps.mutex.Unlock()
 	ps.notifyPut(peer)
 	return nil

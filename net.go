@@ -106,13 +106,10 @@ func (n *network) Dial(addr string) (net.Conn, error) {
 	return n.DialWithContext(context.Background(), addr)
 }
 
-// TODO Used for debugging, remove asap.
-var DDIAL int
-
 // DialWithContext -
 func (n *network) DialWithContext(ctx context.Context, addr string) (net.Conn, error) {
-	DDIAL++
-	dial := DDIAL
+	n.Lock()
+	defer n.Unlock()
 
 	tfields := map[string]interface{}{
 		"new":   false,
@@ -137,7 +134,6 @@ func (n *network) DialWithContext(ctx context.Context, addr string) (net.Conn, e
 	logger := logrus.
 		WithField("lpid", n.GetLocalPeer().ID).
 		WithField("tpid", tpid).
-		WithField("DIAL", dial).
 		WithField("procotolID", protocolID)
 
 	logger.Debugf("Dialing peer")
@@ -145,6 +141,7 @@ func (n *network) DialWithContext(ctx context.Context, addr string) (net.Conn, e
 	if mss, ok := n.sessions[tpid]; ok {
 		if mss.IsClosed() {
 			logrus.Errorf("Session is closed, dialing again")
+			delete(n.sessions, tpid)
 		} else {
 			logger.Infof("Found existing peer ms")
 			st, err := mss.OpenStream()
@@ -360,7 +357,7 @@ func (n *network) handleConnection(proto string, rwc io.ReadWriteCloser) error {
 	logrus.
 		WithField("lpid", n.GetLocalPeer().ID).
 		WithField("rpid", pid).
-		Errorf("Got remote peer id")
+		Debugf("Got remote peer id")
 
 	msc, err := smux.Client(rwc, nil)
 	if err != nil {

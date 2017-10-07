@@ -39,11 +39,8 @@ func GetAddresses(port int) ([]string, error) {
 			}
 			addr := ""
 			if strings.Contains(ip.String(), ":") {
-				ips = append(ips, fmt.Sprintf("tcp6:[%s]:%d", ip.String(), port))
-				ips = append(ips, fmt.Sprintf("udp6:[%s]:%d", ip.String(), port))
 			} else {
 				ips = append(ips, fmt.Sprintf("tcp4:%s:%d", ip.String(), port))
-				ips = append(ips, fmt.Sprintf("udp4:%s:%d", ip.String(), port))
 			}
 			if addr == "" {
 				continue
@@ -58,7 +55,6 @@ func GetAddresses(port int) ([]string, error) {
 			Warnf("Could not get external IP")
 	} else {
 		ips = append(ips, fmt.Sprintf("tcp4:%s:%d", eip, port))
-		ips = append(ips, fmt.Sprintf("udp4:%s:%d", eip, port))
 	}
 
 	return ips, nil
