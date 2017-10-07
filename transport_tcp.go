@@ -5,6 +5,11 @@ import (
 	"errors"
 	"net"
 	"strings"
+	"time"
+)
+
+const (
+	maxDialTimeoutSeconds = 10
 )
 
 // TCPTransport -
@@ -32,7 +37,8 @@ func (t *TCPTransport) DialContext(ctx context.Context, addr string) (net.Conn, 
 		return nil, err
 	}
 
-	c, err := net.Dial("tcp", caddr)
+	d := net.Dialer{Timeout: time.Second * maxDialTimeoutSeconds}
+	c, err := d.DialContext(ctx, "tcp", caddr)
 	if err != nil {
 		return nil, err
 	}
