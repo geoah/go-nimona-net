@@ -1,4 +1,8 @@
-# Nimona Network
+# Deprecation Notice
+
+__Warning__: This library is now deprecated and has been replaced by [fabric](https://github.com/nimona/go-nimona-fabric).
+
+## Nimona Network
 
 Network allows peers to communicate via various user-defined protocols,
 it tries to abstracts peer discovery, connection, stream multiplexing, etc.
